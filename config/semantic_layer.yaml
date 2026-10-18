@@ -1,0 +1,124 @@
+version: "1.0"
+name: "nigerian_retail_ops_semantic_layer"
+description: "Governed semantic layer for multi-city Nigerian retail operations (Lagos, Abuja, Port Harcourt, Ibadan, Kano, Enugu)."
+default_limit: 500
+max_limit: 2000
+timeout_seconds: 5
+
+tables:
+  stores:
+    description: "Retail store locations across Nigerian cities and geopolitical regions."
+    primary_key: store_id
+    columns:
+      store_id: {type: VARCHAR, description: "Unique store identifier (e.g. STR-LOS-01)"}
+      store_name: {type: VARCHAR, description: "Human-readable store name (e.g. Lekki Flagship)"}
+      city: {type: VARCHAR, description: "City name (Lagos, Abuja, Port Harcourt, Ibadan, Kano, Enugu)"}
+      region: {type: VARCHAR, description: "Geopolitical zone (South-West, North-Central, South-South, North-West, South-East)"}
+      channel: {type: VARCHAR, description: "Primary store format (Flagship, Express, Mall, Hypermarket)"}
+      opened_date: {type: DATE, description: "Store opening date"}
+      floor_area_sqm: {type: INTEGER, description: "Store retail floor area in square meters"}
+
+  products:
+    description: "Product catalog across 5 core retail categories."
+    primary_key: product_id
+    columns:
+      product_id: {type: VARCHAR, description: "Unique SKU identifier"}
+      product_name: {type: VARCHAR, description: "Product display name"}
+      category: {type: VARCHAR, description: "Product category (Groceries & Staples, Beverages & Dairy, Personal Care, Household & Cleaning, Fresh & Bakery)"}
+      unit_cost_ngn: {type: DOUBLE, description: "Standard wholesale unit cost in NGN"}
+      unit_price_ngn: {type: DOUBLE, description: "Standard retail unit price in NGN"}
+
+  daily_sales:
+    description: "Daily store-category sales, margins, orders, and returns over 24 months (2024-01-01 to 2025-12-31)."
+    primary_key: sale_id
+    columns:
+      sale_id: {type: VARCHAR, description: "Unique daily store-category record ID"}
+      sale_date: {type: DATE, description: "Calendar date of sales"}
+      store_id: {type: VARCHAR, description: "Foreign key to stores.store_id"}
+      category: {type: VARCHAR, description: "Product category"}
+      channel: {type: VARCHAR, description: "Sales channel (In-Store POS, WhatsApp Commerce, Web Delivery)"}
+      orders_count: {type: INTEGER, description: "Number of completed customer orders"}
+      units_sold: {type: INTEGER, description: "Total product units sold"}
+      revenue_ngn: {type: DOUBLE, description: "Gross realized revenue in Nigerian Naira (NGN)"}
+      cogs_ngn: {type: DOUBLE, description: "Cost of goods sold in NGN"}
+      gross_margin_ngn: {type: DOUBLE, description: "Revenue minus COGS in NGN"}
+      returns_ngn: {type: DOUBLE, description: "Value of returned/refunded goods in NGN"}
+      returned_orders: {type: INTEGER, description: "Count of orders with returns/refunds"}
+      is_salary_week: {type: INTEGER, description: "1 if day of month is between 25 and 30 (salary week), else 0"}
+      is_festive_month: {type: INTEGER, description: "1 if month is December, else 0"}
+
+  staff:
+    description: "Store staffing, shifts, and monthly payroll/productivity metrics."
+    primary_key: staff_id
+    columns:
+      staff_id: {type: VARCHAR, description: "Unique employee ID"}
+      store_id: {type: VARCHAR, description: "Assigned store ID"}
+      full_name: {type: VARCHAR, description: "Staff member name"}
+      role: {type: VARCHAR, description: "Role (Store Manager, Cashier, Inventory Lead, Sales Associate, Fulfillment Rider)"}
+      monthly_salary_ngn: {type: DOUBLE, description: "Gross monthly salary in NGN"}
+      tenure_months: {type: INTEGER, description: "Months employed at the chain"}
+      active: {type: INTEGER, description: "1 if currently active, 0 if inactive"}
+
+dimensions:
+  region:
+    expression: "s.region"
+    table: "stores"
+    description: "Geopolitical region (South-West, North-Central, South-South, North-West, South-East)"
+  city:
+    expression: "s.city"
+    table: "stores"
+    description: "City where the store operates (Lagos, Abuja, Port Harcourt, Ibadan, Kano, Enugu)"
+  category:
+    expression: "d.category"
+    table: "daily_sales"
+    description: "Retail product category (Groceries & Staples, Beverages & Dairy, Personal Care, Household & Cleaning, Fresh & Bakery)"
+  channel:
+    expression: "d.channel"
+    table: "daily_sales"
+    description: "Sales fulfillment channel (In-Store POS, WhatsApp Commerce, Web Delivery)"
+  store_name:
+    expression: "s.store_name"
+    table: "stores"
+    description: "Retail branch name"
+
+metrics:
+  revenue_ngn:
+    label: "Total Revenue (NGN)"
+    sql: "ROUND(SUM(revenue_ngn), 2)"
+    unit: "NGN"
+    description: "Sum of realized gross sales revenue in Naira."
+  gross_margin_ngn:
+    label: "Gross Margin (NGN)"
+    sql: "ROUND(SUM(gross_margin_ngn), 2)"
+    unit: "NGN"
+    description: "Total gross profit (revenue minus cost of goods sold) in Naira."
+  gross_margin_pct:
+    label: "Gross Margin (%)"
+    sql: "ROUND(100.0 * SUM(gross_margin_ngn) / NULLIF(SUM(revenue_ngn), 0), 2)"
+    unit: "%"
+    description: "Gross margin percentage of total revenue."
+  orders_count:
+    label: "Total Orders"
+    sql: "SUM(orders_count)"
+    unit: "orders"
+    description: "Total completed customer transactions."
+  avg_basket_ngn:
+    label: "Average Basket Size (NGN)"
+    sql: "ROUND(SUM(revenue_ngn) / NULLIF(SUM(orders_count), 0), 2)"
+    unit: "NGN"
+    description: "Average revenue per order (AOV / basket value) in Naira."
+  return_rate:
+    label: "Return Rate (%)"
+    sql: "ROUND(100.0 * SUM(returns_ngn) / NULLIF(SUM(revenue_ngn), 0), 2)"
+    unit: "%"
+    description: "Percentage of gross revenue refunded or returned."
+
+joins:
+  - left_table: "daily_sales"
+    right_table: "stores"
+    on: "daily_sales.store_id = stores.store_id"
+    type: "INNER"
+  - left_table: "staff"
+    right_table: "stores"
+    on: "staff.store_id = stores.store_id"
+    type: "INNER"

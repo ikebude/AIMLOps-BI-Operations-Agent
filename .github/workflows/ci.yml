@@ -1,0 +1,33 @@
+name: BI Operations Agent CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-and-evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Seed Nigerian retail dataset & run 50-question evaluation benchmark
+        run: |
+          python -m src.bi_agent.evaluate
+
+      - name: Run pytest suite
+        run: |
+          pytest -q
