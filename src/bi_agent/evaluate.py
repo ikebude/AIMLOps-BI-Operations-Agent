@@ -419,6 +419,236 @@ ADVERSARIAL_PROMPTS: List[Dict[str, str]] = [
 ]
 
 
+# 25 held-out reworded questions (not used to design the compiler templates); reported separately.
+HELDOUT_QUESTIONS: List[Dict[str, Any]] = [
+    {
+        "id": 'H01',
+        "domain": 'Revenue & Growth',
+        "question": 'How much did the whole chain sell in 2024, in naira?',
+        "expected_sql": (
+            "SELECT ROUND(SUM(revenue_ngn), 2) FROM daily_sales WHERE STRFTIME('%Y', sale_date) = '2024'"
+        ),
+        "ordered": False,
+    },
+    {
+        "id": 'H02',
+        "domain": 'Revenue & Growth',
+        "question": 'Give me 2024 sales broken down month by month.',
+        "expected_sql": (
+            "SELECT STRFTIME('%Y-%m', sale_date) AS m, ROUND(SUM(revenue_ngn), 2) FROM daily_sales WHERE STRFTIME('%Y', sale_date) = '2024' GROUP BY m ORDER BY m"
+        ),
+        "ordered": True,
+    },
+    {
+        "id": 'H03',
+        "domain": 'Revenue & Growth',
+        "question": 'What did Abuja stores bring in during 2024?',
+        "expected_sql": (
+            "SELECT ROUND(SUM(d.revenue_ngn), 2) FROM daily_sales d JOIN stores s ON d.store_id = s.store_id WHERE s.city = 'Abuja' AND STRFTIME('%Y', d.sale_date) = '2024'"
+        ),
+        "ordered": False,
+    },
+    {
+        "id": 'H04',
+        "domain": 'Revenue & Growth',
+        "question": 'Total takings for Personal Care last year (2025)?',
+        "expected_sql": (
+            "SELECT ROUND(SUM(revenue_ngn), 2) FROM daily_sales WHERE category = 'Personal Care' AND STRFTIME('%Y', sale_date) = '2025'"
+        ),
+        "ordered": False,
+    },
+    {
+        "id": 'H05',
+        "domain": 'Revenue & Growth',
+        "question": 'How much revenue came through Web Delivery in 2024?',
+        "expected_sql": (
+            "SELECT ROUND(SUM(revenue_ngn), 2) FROM daily_sales WHERE channel = 'Web Delivery' AND STRFTIME('%Y', sale_date) = '2024'"
+        ),
+        "ordered": False,
+    },
+    {
+        "id": 'H06',
+        "domain": 'Revenue & Growth',
+        "question": 'Sales in November 2024?',
+        "expected_sql": (
+            "SELECT ROUND(SUM(revenue_ngn), 2) FROM daily_sales WHERE STRFTIME('%Y-%m', sale_date) = '2024-11'"
+        ),
+        "ordered": False,
+    },
+    {
+        "id": 'H07',
+        "domain": 'Margins & Profitability',
+        "question": 'What was our gross profit in 2024?',
+        "expected_sql": (
+            "SELECT ROUND(SUM(gross_margin_ngn), 2) FROM daily_sales WHERE STRFTIME('%Y', sale_date) = '2024'"
+        ),
+        "ordered": False,
+    },
+    {
+        "id": 'H08',
+        "domain": 'Margins & Profitability',
+        "question": 'Margin % for Beverages & Dairy in 2024?',
+        "expected_sql": (
+            "SELECT ROUND(100.0 * SUM(gross_margin_ngn) / NULLIF(SUM(revenue_ngn), 0), 2) FROM daily_sales WHERE category = 'Beverages & Dairy' AND STRFTIME('%Y', sale_date) = '2024'"
+        ),
+        "ordered": False,
+    },
+    {
+        "id": 'H09',
+        "domain": 'Margins & Profitability',
+        "question": 'Which product category was least profitable by margin percentage in 2025?',
+        "expected_sql": (
+            "SELECT category, ROUND(100.0 * SUM(gross_margin_ngn) / NULLIF(SUM(revenue_ngn), 0), 2) AS p FROM daily_sales WHERE STRFTIME('%Y', sale_date) = '2025' GROUP BY category ORDER BY p ASC LIMIT 1"
+        ),
+        "ordered": True,
+    },
+    {
+        "id": 'H10',
+        "domain": 'Margins & Profitability',
+        "question": 'How much did goods cost us in 2024 (COGS)?',
+        "expected_sql": (
+            "SELECT ROUND(SUM(cogs_ngn), 2) FROM daily_sales WHERE STRFTIME('%Y', sale_date) = '2024'"
+        ),
+        "ordered": False,
+    },
+    {
+        "id": 'H11',
+        "domain": 'Margins & Profitability',
+        "question": 'List gross margin for each store in 2025, highest first.',
+        "expected_sql": (
+            "SELECT s.store_name, ROUND(SUM(d.gross_margin_ngn), 2) AS gm FROM daily_sales d JOIN stores s ON d.store_id = s.store_id WHERE STRFTIME('%Y', d.sale_date) = '2025' GROUP BY s.store_name ORDER BY gm DESC"
+        ),
+        "ordered": True,
+    },
+    {
+        "id": 'H12',
+        "domain": 'Store & Regional Rankings',
+        "question": 'Name the three best-selling stores of 2024 by revenue.',
+        "expected_sql": (
+            "SELECT s.store_name, ROUND(SUM(d.revenue_ngn), 2) AS r FROM daily_sales d JOIN stores s ON d.store_id = s.store_id WHERE STRFTIME('%Y', d.sale_date) = '2024' GROUP BY s.store_name ORDER BY r DESC LIMIT 3"
+        ),
+        "ordered": True,
+    },
+    {
+        "id": 'H13',
+        "domain": 'Store & Regional Rankings',
+        "question": 'Which store sold the least in 2025?',
+        "expected_sql": (
+            "SELECT s.store_name, ROUND(SUM(d.revenue_ngn), 2) AS r FROM daily_sales d JOIN stores s ON d.store_id = s.store_id WHERE STRFTIME('%Y', d.sale_date) = '2025' GROUP BY s.store_name ORDER BY r ASC LIMIT 1"
+        ),
+        "ordered": True,
+    },
+    {
+        "id": 'H14',
+        "domain": 'Store & Regional Rankings',
+        "question": 'Revenue per region for 2024 please.',
+        "expected_sql": (
+            "SELECT s.region, ROUND(SUM(d.revenue_ngn), 2) FROM daily_sales d JOIN stores s ON d.store_id = s.store_id WHERE STRFTIME('%Y', d.sale_date) = '2024' GROUP BY s.region"
+        ),
+        "ordered": False,
+    },
+    {
+        "id": 'H15',
+        "domain": 'Store & Regional Rankings',
+        "question": 'How many shops do we have in each city?',
+        "expected_sql": (
+            'SELECT city, COUNT(*) FROM stores GROUP BY city'
+        ),
+        "ordered": False,
+    },
+    {
+        "id": 'H16',
+        "domain": 'Store & Regional Rankings',
+        "question": 'How many orders did Port Harcourt stores process in 2024?',
+        "expected_sql": (
+            "SELECT SUM(d.orders_count) FROM daily_sales d JOIN stores s ON d.store_id = s.store_id WHERE s.city = 'Port Harcourt' AND STRFTIME('%Y', d.sale_date) = '2024'"
+        ),
+        "ordered": False,
+    },
+    {
+        "id": 'H17',
+        "domain": 'Seasonality & Salary-Week',
+        "question": 'How much did we sell in salary weeks during 2024?',
+        "expected_sql": (
+            "SELECT ROUND(SUM(revenue_ngn), 2) FROM daily_sales WHERE is_salary_week = 1 AND STRFTIME('%Y', sale_date) = '2024'"
+        ),
+        "ordered": False,
+    },
+    {
+        "id": 'H18',
+        "domain": 'Seasonality & Salary-Week',
+        "question": 'What was the strongest sales month of 2024?',
+        "expected_sql": (
+            "SELECT STRFTIME('%Y-%m', sale_date) AS m, ROUND(SUM(revenue_ngn), 2) AS r FROM daily_sales WHERE STRFTIME('%Y', sale_date) = '2024' GROUP BY m ORDER BY r DESC LIMIT 1"
+        ),
+        "ordered": True,
+    },
+    {
+        "id": 'H19',
+        "domain": 'Seasonality & Salary-Week',
+        "question": 'What was the typical basket value in 2024?',
+        "expected_sql": (
+            "SELECT ROUND(SUM(revenue_ngn) / NULLIF(SUM(orders_count), 0), 2) FROM daily_sales WHERE STRFTIME('%Y', sale_date) = '2024'"
+        ),
+        "ordered": False,
+    },
+    {
+        "id": 'H20',
+        "domain": 'Seasonality & Salary-Week',
+        "question": 'Q1 2025 total revenue?',
+        "expected_sql": (
+            "SELECT ROUND(SUM(revenue_ngn), 2) FROM daily_sales WHERE STRFTIME('%Y', sale_date) = '2025' AND CAST(STRFTIME('%m', sale_date) AS INTEGER) BETWEEN 1 AND 3"
+        ),
+        "ordered": False,
+    },
+    {
+        "id": 'H21',
+        "domain": 'Returns, Staff & Catalog',
+        "question": 'What share of 2024 revenue was refunded?',
+        "expected_sql": (
+            "SELECT ROUND(100.0 * SUM(returns_ngn) / NULLIF(SUM(revenue_ngn), 0), 2) FROM daily_sales WHERE STRFTIME('%Y', sale_date) = '2024'"
+        ),
+        "ordered": False,
+    },
+    {
+        "id": 'H22',
+        "domain": 'Returns, Staff & Catalog',
+        "question": "How many employees are there in each store, and what is each store's monthly wage bill?",
+        "expected_sql": (
+            'SELECT s.store_name, COUNT(st.staff_id), ROUND(SUM(st.monthly_salary_ngn), 2) FROM staff st JOIN stores s ON st.store_id = s.store_id GROUP BY s.store_name'
+        ),
+        "ordered": False,
+    },
+    {
+        "id": 'H23',
+        "domain": 'Returns, Staff & Catalog',
+        "question": 'What are the three cheapest products we stock?',
+        "expected_sql": (
+            'SELECT product_name, unit_price_ngn FROM products ORDER BY unit_price_ngn ASC LIMIT 3'
+        ),
+        "ordered": True,
+    },
+    {
+        "id": 'H24',
+        "domain": 'Returns, Staff & Catalog',
+        "question": 'Which city has the highest return rate in 2025?',
+        "expected_sql": (
+            "SELECT s.city, ROUND(100.0 * SUM(d.returns_ngn) / NULLIF(SUM(d.revenue_ngn), 0), 2) AS rr FROM daily_sales d JOIN stores s ON d.store_id = s.store_id WHERE STRFTIME('%Y', d.sale_date) = '2025' GROUP BY s.city ORDER BY rr DESC LIMIT 1"
+        ),
+        "ordered": True,
+    },
+    {
+        "id": 'H25',
+        "domain": 'Returns, Staff & Catalog',
+        "question": 'Average monthly salary by job role?',
+        "expected_sql": (
+            'SELECT role, ROUND(AVG(monthly_salary_ngn), 2) FROM staff GROUP BY role'
+        ),
+        "ordered": False,
+    },
+]
+
+
 def _rows_match(
     pred_cols: List[str],
     pred_rows: List[Dict[str, Any]],
@@ -444,6 +674,29 @@ def _rows_match(
                 if str(pval) != str(eval_):
                     return False
     return True
+
+
+def _norm_cell(v: Any) -> str:
+    return str(round(float(v), 2)) if isinstance(v, float) else str(v)
+
+
+def _sort_rows(cols: List[str], rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Order-insensitive comparison support: sort rows by a normalised tuple of their values."""
+    return sorted(rows, key=lambda r: tuple(_norm_cell(r.get(c)) for c in cols))
+
+
+def _heldout_match(
+    ordered: bool,
+    pred_cols: List[str],
+    pred_rows: List[Dict[str, Any]],
+    exp_cols: List[str],
+    exp_rows: List[Dict[str, Any]],
+) -> bool:
+    """Strict execution match (column count must be equal); row order only matters if ordered."""
+    if not ordered:
+        pred_rows = _sort_rows(pred_cols, pred_rows)
+        exp_rows = _sort_rows(exp_cols, exp_rows)
+    return _rows_match(pred_cols, pred_rows, exp_cols, exp_rows)
 
 
 def generate_charts(
@@ -754,6 +1007,52 @@ def run_evaluation(seed: int = 42, output_root: Optional[Path] = None) -> Dict[s
             }
         )
 
+    # Held-out reworded questions: scored separately, never part of the headline accuracy.
+    heldout_results: List[Dict[str, Any]] = []
+    heldout_domains: Dict[str, Dict[str, int]] = {}
+    for item in HELDOUT_QUESTIONS:
+        h_exp_cols, h_exp_rows = db.execute_query(item["expected_sql"])
+        h_resp = engine.ask(item["question"])
+        h_ok = bool(
+            h_resp["safe"]
+            and _heldout_match(
+                item["ordered"], h_resp["columns"], h_resp["rows"], h_exp_cols, h_exp_rows
+            )
+        )
+        hd = heldout_domains.setdefault(item["domain"], {"total": 0, "correct": 0})
+        hd["total"] += 1
+        hd["correct"] += int(h_ok)
+        heldout_results.append(
+            {
+                "id": item["id"],
+                "domain": item["domain"],
+                "question": item["question"],
+                "generated_sql": h_resp["sql"],
+                "expected_sql": item["expected_sql"],
+                "ordered": item["ordered"],
+                "correct": h_ok,
+                "safe": h_resp["safe"],
+                "latency_ms": h_resp["latency_ms"],
+                "row_count": len(h_resp["rows"]),
+            }
+        )
+    heldout_correct = sum(1 for r in heldout_results if r["correct"])
+    heldout_payload: Dict[str, Any] = {
+        "questions_total": len(HELDOUT_QUESTIONS),
+        "questions_correct": heldout_correct,
+        "execution_accuracy_pct": round(100.0 * heldout_correct / len(HELDOUT_QUESTIONS), 2),
+        "domain_breakdown": [
+            {
+                "domain": dom,
+                "total": c["total"],
+                "correct": c["correct"],
+                "accuracy_pct": round(100.0 * c["correct"] / max(c["total"], 1), 2),
+            }
+            for dom, c in heldout_domains.items()
+        ],
+        "question_results": heldout_results,
+    }
+
     # Run KPI Anomaly Monitor & Weekly Digest
     digest_info = monitor.generate_weekly_digest(output_path=reports_dir / "weekly_digest.md")
 
@@ -828,6 +1127,7 @@ def run_evaluation(seed: int = 42, output_root: Optional[Path] = None) -> Dict[s
             "wow_revenue_growth_pct": digest_info["wow_revenue_growth_pct"],
             "top_anomalies": digest_info["anomalies"][:6],
         },
+        "heldout": heldout_payload,
         "adversarial_results": adversarial_results,
         "question_results": question_results,
         "seed_status": seed_info["status"],
@@ -858,6 +1158,8 @@ if __name__ == "__main__":
         f"Evaluation Complete:\n"
         f"  Execution Accuracy : {summary['questions_correct']}/{summary['questions_total']} "
         f"({summary['execution_accuracy_pct']}%)\n"
+        f"  Held-out           : {summary['heldout']['questions_correct']}/{summary['heldout']['questions_total']} "
+        f"({summary['heldout']['execution_accuracy_pct']}%)\n"
         f"  Adversarial Blocked: {summary['adversarial_prompts_blocked']}/{summary['adversarial_prompts_total']} "
         f"(unsafe_sql_executed={summary['unsafe_sql_executed']})\n"
         f"  Latency (ms)       : median={summary['median_latency_ms']} ms, p95={summary['p95_latency_ms']} ms\n"
