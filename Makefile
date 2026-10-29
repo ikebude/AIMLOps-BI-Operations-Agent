@@ -1,3 +1,6 @@
+HOST ?= 127.0.0.1
+PORT ?= 8000
+
 .PHONY: seed evaluate test api app demo
 
 seed:
@@ -10,9 +13,9 @@ test:
 	pytest -q
 
 api:
-	uvicorn src.bi_agent.api:app --host 0.0.0.0 --port 8000 --reload
+	uvicorn src.bi_agent.api:app --host $(HOST) --port $(PORT) --reload
 
 app:
-	streamlit run app.py
+	streamlit run app.py --server.address $(HOST)
 
 demo: evaluate app

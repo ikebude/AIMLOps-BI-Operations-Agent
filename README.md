@@ -112,7 +112,8 @@ python -m src.bi_agent.evaluate
 pytest -v
 
 # 4. Launch the FastAPI service
-uvicorn src.bi_agent.api:app --host 0.0.0.0 --port 8000
+export BI_AGENT_API_KEY="$(python -c 'import secrets;print(secrets.token_urlsafe(32))')"
+uvicorn src.bi_agent.api:app --host 127.0.0.1 --port 8000
 
 # 5. Launch the Streamlit executive copilot dashboard
 streamlit run app.py

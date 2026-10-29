@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import secrets
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 
 from src.bi_agent.engine import BIOperationsEngine
@@ -16,6 +19,18 @@ app = FastAPI(
     description="Governed NL-to-SQL over a semantic layer, rolling 28-day MAD KPI anomaly detection, and automated weekly executive digests.",
     version="1.0.0",
 )
+
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+def require_api_key(provided: Optional[str] = Depends(_api_key_header)) -> None:
+    """Fail closed: reject every request unless BI_AGENT_API_KEY is set and matches X-API-Key."""
+    expected = os.getenv("BI_AGENT_API_KEY", "")
+    if not expected:
+        raise HTTPException(status_code=503, detail="API key not configured on server")
+    if not provided or not secrets.compare_digest(provided.encode(), expected.encode()):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
 
 _db: Optional[RetailDatabase] = None
 _engine: Optional[BIOperationsEngine] = None
@@ -62,7 +77,7 @@ def health_check() -> Dict[str, Any]:
     }
 
 
-@app.post("/v1/ask", response_model=AskResponse)
+@app.post("/v1/ask", response_model=AskResponse, dependencies=[Depends(require_api_key)])
 def ask_question(payload: AskRequest) -> Dict[str, Any]:
     if not payload.question or not payload.question.strip():
         raise HTTPException(status_code=400, detail="Question must not be empty.")
@@ -70,7 +85,7 @@ def ask_question(payload: AskRequest) -> Dict[str, Any]:
     return engine.ask(payload.question)
 
 
-@app.get("/v1/kpis/anomalies")
+@app.get("/v1/kpis/anomalies", dependencies=[Depends(require_api_key)])
 def get_kpi_anomalies(
     z_threshold: float = Query(2.5, ge=1.5, le=10.0),
     lookback_days: int = Query(10, ge=1, le=28),
@@ -87,7 +102,7 @@ def get_kpi_anomalies(
     }
 
 
-@app.get("/v1/digest/weekly")
+@app.get("/v1/digest/weekly", dependencies=[Depends(require_api_key)])
 def get_weekly_digest() -> Dict[str, Any]:
     _, _, monitor = _get_components()
     return monitor.generate_weekly_digest()

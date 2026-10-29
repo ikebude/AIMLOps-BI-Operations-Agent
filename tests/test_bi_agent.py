@@ -130,8 +130,9 @@ def test_full_benchmark_evaluation_meets_targets() -> None:
     assert (ROOT_DIR / "img" / "kpi_anomalies.png").exists()
 
 
-def test_fastapi_endpoints() -> None:
-    client = TestClient(app)
+def test_fastapi_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BI_AGENT_API_KEY", "test-key")
+    client = TestClient(app, headers={"X-API-Key": "test-key"})
 
     h = client.get("/health")
     assert h.status_code == 200
