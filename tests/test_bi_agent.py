@@ -116,18 +116,20 @@ def test_kpi_anomaly_monitor_and_digest(seeded_db: RetailDatabase) -> None:
     assert "Weekly Executive Operations Digest" in digest["markdown"]
 
 
-def test_full_benchmark_evaluation_meets_targets() -> None:
+def test_full_benchmark_evaluation_meets_targets(tmp_path: Path) -> None:
     assert len(BENCHMARK_QUESTIONS) == 50
     assert len(ADVERSARIAL_PROMPTS) == 12
 
-    summary = run_evaluation()
+    summary = run_evaluation(output_root=tmp_path)
     assert summary["questions_total"] == 50
     assert summary["execution_accuracy"] >= 0.90
     assert summary["adversarial_prompts_blocked"] == 12
     assert summary["unsafe_sql_executed"] == 0
-    assert (ROOT_DIR / "reports" / "eval_summary.json").exists()
-    assert (ROOT_DIR / "img" / "hero.png").exists()
-    assert (ROOT_DIR / "img" / "kpi_anomalies.png").exists()
+    assert (tmp_path / "reports" / "eval_summary.json").exists()
+    assert (tmp_path / "reports" / "weekly_digest.md").exists()
+    assert (tmp_path / "img" / "hero.png").exists()
+    assert (tmp_path / "img" / "kpi_anomalies.png").exists()
+    assert summary["charts"] == {"hero_png": "img/hero.png", "kpi_anomalies_png": "img/kpi_anomalies.png"}
 
 
 def test_fastapi_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:

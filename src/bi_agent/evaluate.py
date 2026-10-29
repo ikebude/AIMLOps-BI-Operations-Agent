@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import matplotlib
 matplotlib.use("Agg")
@@ -17,9 +17,10 @@ from src.bi_agent.engine import BIOperationsEngine
 from src.bi_agent.monitor import KPIAnomalyMonitor
 from src.bi_agent.seed import ROOT_DIR, RetailDatabase, seed_all
 
-REPORTS_DIR = ROOT_DIR / "reports"
-IMG_DIR = ROOT_DIR / "img"
-DOCS_IMG_DIR = ROOT_DIR / "docs" / "img"
+KNOWN_MISS_ANALYSIS = {
+    "Q41": "Multi-hop ratio/covariance statistical expression not in base semantic templates.",
+    "Q50": "Multi-hop ratio/covariance statistical expression not in base semantic templates.",
+}
 
 
 # 50 diverse business questions across 5 operational domains paired with ground-truth SQL
@@ -449,10 +450,10 @@ def generate_charts(
     eval_summary: Dict[str, Any],
     anomalies: List[Dict[str, Any]],
     db: RetailDatabase,
-) -> Tuple[str, str]:
-    """Generate img/hero.png (1600x900) and img/kpi_anomalies.png (1200x750)."""
-    IMG_DIR.mkdir(parents=True, exist_ok=True)
-    DOCS_IMG_DIR.mkdir(parents=True, exist_ok=True)
+    img_dir: Path,
+) -> Tuple[Path, Path]:
+    """Generate hero.png (1600x900) and kpi_anomalies.png (1200x750) into img_dir."""
+    img_dir.mkdir(parents=True, exist_ok=True)
 
     # Palette: Monochrome dark ink (#0B0B0C / #111827) + Emerald (#10B981) + Cyan (#06B6D4) + Red (#EF4444)
     plt.rcParams["font.sans-serif"] = "DejaVu Sans"
@@ -539,9 +540,8 @@ def generate_charts(
     for bar, val in zip(c_bars, c_revs):
         ax3.text(bar.get_width() + 25.0, bar.get_y() + bar.get_height() / 2, f"NGN {val:,.1f}M", va="center", color="#FAFAFA", fontsize=9.5, fontweight="bold")
 
-    hero_path = IMG_DIR / "hero.png"
+    hero_path = img_dir / "hero.png"
     fig.savefig(hero_path, dpi=100, facecolor=fig.get_facecolor())
-    fig.savefig(DOCS_IMG_DIR / "hero.png", dpi=100, facecolor=fig.get_facecolor())
     plt.close(fig)
 
     # ----------------------------------------------------------------------
@@ -650,17 +650,23 @@ def generate_charts(
             fontweight="bold",
         )
 
-    anom_path = IMG_DIR / "kpi_anomalies.png"
+    anom_path = img_dir / "kpi_anomalies.png"
     fig2.savefig(anom_path, dpi=100, facecolor=fig2.get_facecolor())
-    fig2.savefig(DOCS_IMG_DIR / "kpi_anomalies.png", dpi=100, facecolor=fig2.get_facecolor())
     plt.close(fig2)
 
-    return str(hero_path), str(anom_path)
+    return hero_path, anom_path
 
 
-def run_evaluation(seed: int = 42) -> Dict[str, Any]:
-    """Run the 50-question NL-to-SQL benchmark, 12 adversarial safety checks, and KPI monitor."""
-    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+def run_evaluation(seed: int = 42, output_root: Optional[Path] = None) -> Dict[str, Any]:
+    """Run the 50-question NL-to-SQL benchmark, 12 adversarial safety checks, and KPI monitor.
+
+    Artifacts are written under ``output_root`` (default: the repository root) as
+    ``reports/*.json``, ``reports/weekly_digest.md`` and ``img/*.png``.
+    """
+    root = Path(output_root) if output_root is not None else ROOT_DIR
+    reports_dir = root / "reports"
+    img_dir = root / "img"
+    reports_dir.mkdir(parents=True, exist_ok=True)
     seed_info = seed_all(seed=seed)
 
     db = RetailDatabase()
@@ -692,16 +698,24 @@ def run_evaluation(seed: int = 42) -> Dict[str, Any]:
         if matched:
             domain_counters[domain]["correct"] += 1
         else:
-            failed_questions.append(
-                {
-                    "id": qid,
-                    "domain": domain,
-                    "question": q_text,
-                    "generated_sql": resp["sql"],
-                    "expected_sql": exp_sql,
-                    "reason": "Multi-hop ratio/covariance statistical expression not in base semantic templates.",
-                }
-            )
+            if not resp["safe"]:
+                reason = f"Blocked by guard: {resp['guard_reason']}"
+            else:
+                reason = (
+                    f"Result mismatch: expected {len(exp_rows)} rows x {len(exp_cols)} cols, "
+                    f"got {len(resp['rows'])} x {len(resp['columns'])}"
+                )
+            failure: Dict[str, Any] = {
+                "id": qid,
+                "domain": domain,
+                "question": q_text,
+                "generated_sql": resp["sql"],
+                "expected_sql": exp_sql,
+                "reason": reason,
+            }
+            if qid in KNOWN_MISS_ANALYSIS:
+                failure["analysis"] = KNOWN_MISS_ANALYSIS[qid]
+            failed_questions.append(failure)
 
         question_results.append(
             {
@@ -741,7 +755,7 @@ def run_evaluation(seed: int = 42) -> Dict[str, Any]:
         )
 
     # Run KPI Anomaly Monitor & Weekly Digest
-    digest_info = monitor.generate_weekly_digest()
+    digest_info = monitor.generate_weekly_digest(output_path=reports_dir / "weekly_digest.md")
 
     total_q = len(BENCHMARK_QUESTIONS)
     correct_q = sum(1 for r in question_results if r["correct"])
@@ -823,16 +837,17 @@ def run_evaluation(seed: int = 42) -> Dict[str, Any]:
         eval_summary=summary_payload,
         anomalies=digest_info["anomalies"],
         db=db,
+        img_dir=img_dir,
     )
     summary_payload["charts"] = {
-        "hero_png": hero_chart,
-        "kpi_anomalies_png": anom_chart,
+        "hero_png": hero_chart.relative_to(root).as_posix(),
+        "kpi_anomalies_png": anom_chart.relative_to(root).as_posix(),
     }
 
-    eval_path = REPORTS_DIR / "eval_summary.json"
+    eval_path = reports_dir / "eval_summary.json"
     eval_path.write_text(json.dumps(summary_payload, indent=2), encoding="utf-8")
     # Also write reports/metrics.json for compatibility with PRODUCT_SPECS.md §0.3
-    (REPORTS_DIR / "metrics.json").write_text(json.dumps(summary_payload, indent=2), encoding="utf-8")
+    (reports_dir / "metrics.json").write_text(json.dumps(summary_payload, indent=2), encoding="utf-8")
 
     return summary_payload
 
