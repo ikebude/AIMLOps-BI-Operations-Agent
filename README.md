@@ -56,12 +56,14 @@ User Query (Plain English)
           ▼ (Validated SQL)
 ┌──────────────────────────────────────────────┐
 │        Embedded Analytics Engine             │
-│        (DuckDB / SQLite / Postgres)          │
+│        (SQLite, read-only URI mode)          │
 └──────────────────────────────────────────────┘
           │
           ▼
 Executive Response + Chart Spec + Anomaly Z-Score
 ```
+
+Storage backend: SQLite (read-only URI mode). An optional DuckDB code path exists in `seed.py` when `duckdb` is installed; it is not exercised by CI. Postgres is on the roadmap.
 
 1. **Governed Semantic Layer (`config/semantic_layer.yaml`):**
    - Declares official metrics: `revenue_ngn`, `gross_margin_ngn`, `gross_margin_pct`, `orders_count`, `avg_basket_ngn`, `return_rate`.

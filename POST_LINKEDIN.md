@@ -12,7 +12,7 @@ I built **BI Operations Agent** (`AIMLOps-BI-Operations-Agent`) — an open-sour
 Tested on a 2-year synthetic dataset of a Nigerian retail chain (10 stores across Lagos, Abuja, Port Harcourt, Ibadan, Kano, Enugu; ₦10.15B GMV across 2.15M orders):
 
 - **96.0% Execution Accuracy (48/50):** Evaluated across 5 domains (revenue growth, margins, regional rankings, salary-week dynamics, returns & payroll).
-- **100% Adversarial Injection Block Rate (12/12):** Zero unsafe queries executed (`DROP`, `DELETE`, `UPDATE`, comments, and semicolons are blocked at the AST parser level before hitting DuckDB/SQLite).
+- **100% Adversarial Injection Block Rate (12/12):** Zero unsafe queries executed (`DROP`, `DELETE`, `UPDATE`, comments, and semicolons are blocked at the AST parser level before hitting SQLite).
 - **Sub-Second Speed:** 48.4 ms median latency (202.2 ms p95).
 - **Proactive Anomaly Monitoring:** Uses rolling 28-day Median Absolute Deviation (MAD z-scores) to flag store-level revenue drops and margin spikes, auto-generating a weekly executive digest.
 

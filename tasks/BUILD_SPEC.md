@@ -318,3 +318,6 @@ git status --porcelain                                                   # expec
 $V/python -c "import json;d=json.load(open('reports/eval_summary.json'));print(d['questions_correct'],d['adversarial_prompts_blocked'],d['unsafe_sql_executed'],d['median_latency_ms'],d['p95_latency_ms'],d['heldout']['questions_correct'],d['charts'])"
 grep -rn "docs/img\|0\.0\.0\.0\|48\.4\|202\.2\|Postgres" README.md POST_*.md Makefile src app.py
 ```
+
+## Builder notes
+- Item 5: README line 13 (SME problem statement naming PostgreSQL as a customer data source) was left as the spec allows, so `grep -i postgres` also matches it besides the roadmap sentence. The `engine.py` LLM prompt string ("DuckDB/SQLite database", inside `_call_external_llm`) was not touched because the spec's scope fence forbids editing that code.
