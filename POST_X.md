@@ -7,14 +7,15 @@ I built **BI Operations Agent**: plain-English analytics with a governed YAML se
 
 Repo: https://github.com/ikebude/AIMLOps-BI-Operations-Agent
 
-![Hero](img/hero.png)
+![Streamlit UI](img/ui_streamlit.png)
 
 **2/6**
 Benchmark results across a 50-question enterprise test suite:
-- Execution accuracy: **96.0% (48/50)**
+- Execution accuracy: **96.0% (48/50)** on the in-sample benchmark; **56.0% (14/25)** on 25 reworded held-out questions
 - Adversarial attacks blocked: **12/12 (100%)**
 - Unsafe SQL executed: **0**
-- Median latency: **48.4 ms** (p95: 202.2 ms)
+- Median latency: **17.8 ms** (p95: 36.6 ms; machine-dependent)
+(Synthetic Nigerian retail data.)
 
 **3/6**
 Why a Semantic Layer?
@@ -32,6 +33,6 @@ It runs rolling 28-day Median Absolute Deviation (MAD robust z-scores) on daily 
 When $|z| \ge 2.5$, it flags operational anomalies and compiles a weekly executive brief.
 
 **6/6**
-Runs offline with local embeddings/compiler or connected to Claude/OpenAI/Ollama.
-FastAPI + Streamlit + 20 passing unit tests in CI.
+Runs offline with the local deterministic compiler or connected to Claude/OpenAI/Ollama.
+FastAPI + Streamlit + 63 passing tests.
 Check it out: https://github.com/ikebude/AIMLOps-BI-Operations-Agent

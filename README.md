@@ -1,10 +1,14 @@
 # BI Operations Agent — Plain-English Analytics, Governed SQL & KPI Monitoring
 
-> **One-line result:** Natural-language business intelligence agent backed by a governed YAML semantic layer, read-only SQL AST guardrails, and robust MAD z-score anomaly detection — achieving **96.0% execution accuracy (48/50)** and **100% adversarial block rate (12/12 attacks blocked, 0 unsafe SQL executed)** at **48.4 ms median latency** across 2 years of Nigerian retail chain transactions (₦10.15B GMV).
+> **One-line result:** Natural-language business intelligence agent backed by a governed YAML semantic layer, a sqlglot AST read-only SQL guard, and robust MAD z-score anomaly detection. On a **synthetic** 2-year Nigerian retail dataset (₦10.15B GMV) it scores **96.0% execution accuracy (48/50)** on its in-sample 50-question benchmark, **56.0% (14/25)** on 25 reworded held-out questions, and blocks **12/12** adversarial attacks (0 unsafe SQL executed) at **17.8 ms median latency** (p95 36.6 ms; machine-dependent).
 
-| Executive Chat & Semantic Guardrail | Benchmark Accuracy & Latency (`img/hero.png`) |
+| Streamlit UI (`img/ui_streamlit.png`) | KPI anomalies (`img/kpi_anomalies.png`) |
 |---|---|
-| ![BI Operations Agent UI](img/hero.png) | ![KPI Anomalies](img/kpi_anomalies.png) |
+| ![Streamlit UI](img/ui_streamlit.png) | ![KPI Anomalies](img/kpi_anomalies.png) |
+
+Benchmark summary chart (`img/hero.png`):
+
+![Benchmark summary chart](img/hero.png)
 
 ---
 
@@ -23,7 +27,7 @@ Standard generative text-to-SQL approaches fail in real-world business settings 
 
 ## Data
 
-- **Simulated Nigerian Retail Chain (`data/`):** Generated via `src/bi_agent/seed.py`:
+- **Synthetic Nigerian Retail Chain (generated, not real transactions) (`data/`):** Generated via `src/bi_agent/seed.py`:
   - **Period:** 2 full years (2024-01-01 to 2025-12-31, 731 calendar days).
   - **Stores:** 10 physical locations across 6 Nigerian cities (Lagos [Ikeja, Lekki, Surulere], Abuja [Wuse, Garki], Port Harcourt, Ibadan, Kano, Enugu).
   - **Volume:** 36,550 store-category daily sales records representing **2,145,814 orders** and **₦10,149,566,063.03 in gross revenue** (₦2.90B gross margin, 28.61% overall margin).
@@ -84,16 +88,21 @@ Evaluated on an automated 50-question business test suite covering revenue, marg
 
 | Benchmark Dimension | Measured Result | Production Target | Status |
 |---|---:|---:|:---:|
-| **Overall Execution Accuracy** | **`96.0%` (48/50)** | `≥ 90.0%` | Passed |
+| **Overall Execution Accuracy (in-sample)** | **`96.0%` (48/50)** | `≥ 90.0%` | Passed |
 | - *Revenue & Growth Domain (12 Qs)* | **`100.0%` (12/12)** | `100.0%` | Passed |
 | - *Margins & Profitability (10 Qs)* | **`100.0%` (10/10)** | `100.0%` | Passed |
 | - *Store & Regional Rankings (10 Qs)* | **`100.0%` (10/10)** | `100.0%` | Passed |
 | - *Seasonality & Salary-Week (9 Qs)* | **`88.9%` (8/9)** | `≥ 85.0%` | Passed |
 | - *Returns, Staff & Catalog (9 Qs)* | **`88.9%` (8/9)** | `≥ 85.0%` | Passed |
+| **Held-out generalisation (25 reworded Qs)** | **`56.0%` (14/25)** | none set | Reported |
 | **Adversarial Injections Blocked** | **`100.0%` (12/12)** | `100.0%` | Passed |
 | **Unsafe SQL Executed** | **`0`** | `0` | Passed |
-| **Median Execution Latency** | **`48.4 ms`** | `< 2,000 ms` | Passed |
-| **95th Percentile Latency (p95)** | **`202.2 ms`** | `< 6,000 ms` | Passed |
+| **Median Execution Latency** | **`17.8 ms`** | `< 2,000 ms` | Passed |
+| **95th Percentile Latency (p95)** | **`36.6 ms`** | `< 6,000 ms` | Passed |
+
+Latency is machine-dependent; the figures above were measured on the run that produced `reports/eval_summary.json`.
+
+**Held-out generalisation.** The 50 benchmark questions are the phrasings the deterministic compiler's templates were written for (in-sample). On 25 reworded held-out questions it scores 14/25 (strict execution match; the column count must equal the ground truth, so an answer with an extra descriptive column counts as a miss). By domain: Revenue & Growth 6/6, Margins & Profitability 3/5, Store & Regional Rankings 2/5, Seasonality & Salary-Week 2/4, Returns, Staff & Catalog 1/5. The held-out set lives in `HELDOUT_QUESTIONS` in `src/bi_agent/evaluate.py` and was not used to tune the compiler.
 
 > **Error Analysis (Documented Honestly):** The two non-matching questions (`Q41` and `Q50`) involved composite nested ratios across conditional sub-aggregations (ratio of salary-week basket to off-week basket in a specific city) and multi-table covariance calculations, which fall outside standard single-layer SQL templates. These are documented in `reports/eval_summary.json` as future roadmap improvements for multi-step agent reasoning.
 
@@ -110,16 +119,28 @@ pip install -r requirements.txt
 # 2. Run the 50-question benchmark and safety evaluation
 python -m src.bi_agent.evaluate
 
-# 3. Run automated unit & integration test suite (20 tests)
+# 3. Run automated unit & integration test suite (63 tests)
 pytest -v
 
-# 4. Launch the FastAPI service
+# 4. Launch the FastAPI service (the API fails closed without a key)
 export BI_AGENT_API_KEY="$(python -c 'import secrets;print(secrets.token_urlsafe(32))')"
 uvicorn src.bi_agent.api:app --host 127.0.0.1 --port 8000
+curl -s -X POST http://127.0.0.1:8000/v1/ask \
+  -H "X-API-Key: $BI_AGENT_API_KEY" -H "Content-Type: application/json" \
+  -d '{"question": "Show total revenue by region in 2025."}'
 
 # 5. Launch the Streamlit executive copilot dashboard
-streamlit run app.py
+streamlit run app.py --server.address 127.0.0.1
 ```
+
+---
+
+## Security Model
+
+- **AST SQL guard (sqlglot, SQLite dialect):** every query is parsed; exactly one `SELECT`/`WITH` statement is allowed. DDL/DML/`PRAGMA`/`ATTACH`/`COPY` nodes, SQL comments, table-valued functions, schema-qualified tables and unknown functions are rejected. Every table reference in the whole tree (comma joins, subqueries, CTE bodies, `UNION` arms) must be in the semantic-layer allow-list. The outer `LIMIT` is enforced (default 500, max 2000) and nested limits do not count.
+- **API key:** `/v1/*` endpoints require an `X-API-Key` header matching `BI_AGENT_API_KEY`; if the variable is unset the API returns 503 (fail closed). `/health` is public.
+- **Localhost bind:** the documented run commands and `Makefile` bind `127.0.0.1` (override with `HOST=...` only behind your own network controls).
+- **Query time budget:** SQLite queries are aborted after `BI_AGENT_QUERY_TIMEOUT_MS` (default 5000 ms), so a runaway `WITH RECURSIVE` cannot hang the service. The database is also opened read-only.
 
 ---
 

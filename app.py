@@ -24,7 +24,7 @@ st.markdown(
     <style>
     .block-container { padding-top: 1.5rem; }
     div[data-testid="stMetric"] {
-        background-color: #121316;
+        background-color: rgba(127,127,127,0.08);
         border: 1px solid #27272A;
         border-top: 4px solid #06B6D4;
         padding: 12px 16px;
@@ -67,7 +67,7 @@ _, kpi_rows = db.execute_query(
 k = kpi_rows[0]
 c1, c2, c3, c4, c5, c6 = st.columns(6)
 c1.metric("2025 Revenue (NGN)", f"₦{k['rev']/1e9:.2f}B")
-c2.metric("2025 Gross Margin", f"₦{k['gm']/1e6:.1f}M")
+c2.metric("2025 Gross Margin", f"₦{k['gm']/1e9:.2f}B")
 c3.metric("Gross Margin (%)", f"{k['gm_pct']:.2f}%")
 c4.metric("2025 Completed Orders", f"{k['orders']:,}")
 c5.metric("Avg Basket Size", f"₦{k['basket']:,.0f}")
