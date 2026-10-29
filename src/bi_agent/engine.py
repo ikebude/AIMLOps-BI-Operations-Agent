@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sqlite3
 import time
 import urllib.request
 from pathlib import Path
@@ -929,7 +930,16 @@ class BIOperationsEngine:
             candidate_sql = self.compiler.compile(question)
 
         guard_res = self.guard.validate(candidate_sql)
-        if not guard_res.safe:
+        reject_reason = guard_res.reason if not guard_res.safe else None
+        columns: List[str] = []
+        rows: List[Dict[str, Any]] = []
+        if guard_res.safe:
+            sanitized_sql = guard_res.sanitized_sql
+            try:
+                columns, rows = self.db.execute_query(sanitized_sql)
+            except sqlite3.Error as exc:
+                reject_reason = f"Query execution failed: {exc}"
+        if reject_reason is not None:
             latency_ms = round((time.perf_counter() - t0) * 1000.0, 3)
             return {
                 "question": question,
@@ -937,18 +947,16 @@ class BIOperationsEngine:
                 "rows": [],
                 "columns": [],
                 "summary_text": self._build_summary_text(
-                    question, [], [], safe=False, reason=guard_res.reason
+                    question, [], [], safe=False, reason=reject_reason
                 ),
                 "chart_spec": {"type": "none", "x": None, "y": None},
                 "latency_ms": latency_ms,
                 "safe": False,
-                "guard_reason": guard_res.reason,
+                "guard_reason": reject_reason,
                 "provider": used_provider,
                 "cost_usd": 0.0,
             }
 
-        sanitized_sql = guard_res.sanitized_sql
-        columns, rows = self.db.execute_query(sanitized_sql)
         latency_ms = round((time.perf_counter() - t0) * 1000.0, 3)
 
         return {

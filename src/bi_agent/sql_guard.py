@@ -2,57 +2,46 @@
 
 from __future__ import annotations
 
-import re
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional, Set
 
+import sqlglot
 import yaml
+from sqlglot import exp
+from sqlglot.errors import ParseError, TokenError
 
 DEFAULT_SEMANTIC_LAYER_PATH = Path(__file__).resolve().parents[2] / "config" / "semantic_layer.yaml"
 
-FORBIDDEN_KEYWORDS = {
-    "DROP",
-    "DELETE",
-    "UPDATE",
-    "INSERT",
-    "ALTER",
-    "TRUNCATE",
-    "CREATE",
-    "ATTACH",
-    "DETACH",
-    "COPY",
-    "PRAGMA",
-    "GRANT",
-    "REVOKE",
-    "EXEC",
-    "EXECUTE",
-    "CALL",
-    "REPLACE",
-    "MERGE",
-    "VACUUM",
-    "LOAD",
-    "INSTALL",
-    "EXPORT",
-    "IMPORT",
-}
+DIALECT = "sqlite"
 
-FORBIDDEN_SYSTEM_IDENTIFIERS = {
-    "PG_SHADOW",
-    "PG_AUTHID",
-    "PG_USER",
-    "PG_CATALOG",
-    "INFORMATION_SCHEMA",
-    "SQLITE_MASTER",
-    "SQLITE_TEMP_MASTER",
-    "SQLITE_SCHEMA",
-    "DUCKDB_TABLES",
-    "DUCKDB_SETTINGS",
-    "DUCKDB_SECRETS",
-    "READ_CSV",
-    "READ_PARQUET",
-    "READ_JSON",
-}
+# sqlglot logs a "Falling back to parsing as a 'Command'" warning for REPLACE/VACUUM; we reject those anyway.
+logging.getLogger("sqlglot").setLevel(logging.ERROR)
+
+FORBIDDEN_NODES = (exp.DML, exp.DDL, exp.Command, exp.Pragma, exp.Attach, exp.Detach, exp.Copy)
+
+# Functions sqlglot does not model (they parse as exp.Anonymous) and that are harmless in SQLite.
+SAFE_ANONYMOUS_FUNCTIONS = frozenset({"julianday", "printf", "total", "time", "datetime", "unixepoch"})
+
+FORBIDDEN_SYSTEM_IDENTIFIERS = frozenset(
+    {
+        "pg_shadow",
+        "pg_authid",
+        "pg_user",
+        "pg_catalog",
+        "information_schema",
+        "sqlite_master",
+        "sqlite_temp_master",
+        "sqlite_schema",
+        "duckdb_tables",
+        "duckdb_settings",
+        "duckdb_secrets",
+        "read_csv",
+        "read_parquet",
+        "read_json",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -93,135 +82,77 @@ class SQLGuard:
         self.max_limit = max_limit
 
     @staticmethod
-    def _strip_string_literals(sql: str) -> str:
-        """Replace single-quoted string literals with placeholders for structural inspection."""
-        return re.sub(r"'([^']|'')*'", "'__STR__'", sql)
+    def _reject(reason: str) -> GuardResult:
+        return GuardResult(safe=False, sanitized_sql="", reason=reason)
 
     def validate(self, sql: str) -> GuardResult:
-        """Validate a SQL query and return a GuardResult."""
-        if not sql or not sql.strip():
-            return GuardResult(safe=False, sanitized_sql="", reason="Empty SQL query.")
+        """Parse the SQL with sqlglot and validate the AST; return a GuardResult."""
+        raw = (sql or "").strip()
+        if not raw:
+            return self._reject("Empty SQL query.")
 
-        raw = sql.strip()
+        try:
+            tokens = sqlglot.tokenize(raw, read=DIALECT)
+            if any(t.comments for t in tokens):
+                return self._reject("SQL comments ('--' or '/* */') are not permitted.")
+            stmts = [s for s in sqlglot.parse(raw, read=DIALECT) if s is not None]
+        except (ParseError, TokenError) as exc:
+            return self._reject(f"Unparseable SQL: {str(exc).splitlines()[0][:160]}")
 
-        # 1. Reject SQL comments (-- or /* */) which are common injection vectors
-        if "--" in raw or "/*" in raw or "*/" in raw:
-            return GuardResult(
-                safe=False,
-                sanitized_sql="",
-                reason="SQL comments ('--' or '/* */') are not permitted.",
+        if len(stmts) != 1:
+            return self._reject("Multi-statement SQL queries (';') are forbidden.")
+        tree = stmts[0]
+        if not isinstance(tree, exp.Query):
+            return self._reject(
+                f"Only a single SELECT/WITH query is allowed, got {type(tree).__name__}."
             )
 
-        # Strip trailing semicolon if it's at the very end, then forbid any internal semicolons
-        if raw.endswith(";"):
-            raw = raw[:-1].strip()
+        for node in tree.walk():
+            if isinstance(node, FORBIDDEN_NODES):
+                return self._reject(f"Forbidden statement type: {type(node).__name__}.")
+            if isinstance(node, exp.Anonymous) and node.name.lower() not in SAFE_ANONYMOUS_FUNCTIONS:
+                return self._reject(f"Function '{node.name}' is not permitted.")
 
-        masked = self._strip_string_literals(raw)
-        if ";" in masked:
-            return GuardResult(
-                safe=False,
-                sanitized_sql="",
-                reason="Multi-statement SQL queries (';') are forbidden.",
-            )
-
-        # 2. Must start with SELECT or WITH
-        first_token_match = re.match(r"^\s*([A-Za-z_]+)", masked)
-        if not first_token_match:
-            return GuardResult(
-                safe=False,
-                sanitized_sql="",
-                reason="Query must begin with SELECT or WITH.",
-            )
-        first_token = first_token_match.group(1).upper()
-        if first_token not in {"SELECT", "WITH"}:
-            return GuardResult(
-                safe=False,
-                sanitized_sql="",
-                reason=f"Statement must start with SELECT or WITH, got '{first_token}'.",
-            )
-
-        # 3. Check for forbidden DDL/DML/admin tokens anywhere outside string literals
-        upper_tokens = re.findall(r"\b[A-Za-z_][A-Za-z0-9_]*\b", masked.upper())
-        for token in upper_tokens:
-            if token in FORBIDDEN_KEYWORDS:
-                return GuardResult(
-                    safe=False,
-                    sanitized_sql="",
-                    reason=f"Forbidden DDL/DML/administrative keyword detected: {token}.",
-                )
-            if token in FORBIDDEN_SYSTEM_IDENTIFIERS:
-                return GuardResult(
-                    safe=False,
-                    sanitized_sql="",
-                    reason=f"Forbidden system catalog or file function access: {token}.",
-                )
-
-        # 4. Extract CTE aliases so they aren't mistaken for physical tables
-        cte_names: Set[str] = {
-            m.lower()
-            for m in re.findall(
-                r"(?:\bWITH\b|,)\s*([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\(",
-                masked,
-                flags=re.IGNORECASE,
-            )
-        }
-
-        # 5. Extract table references after FROM and JOIN
-        table_Candidates = re.findall(
-            r"\b(?:FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_.]*)",
-            masked,
-            flags=re.IGNORECASE,
-        )
+        cte_names = {c.alias_or_name.lower() for c in tree.find_all(exp.CTE)}
+        for name in cte_names & FORBIDDEN_SYSTEM_IDENTIFIERS:
+            return self._reject(f"Forbidden system catalog name used as CTE: {name}.")
 
         referenced: list[str] = []
-        for candidate in table_Candidates:
-            clean_name = candidate.strip().lower()
-            # Reject schema-qualified system tables like pg_catalog.pg_user
-            if "." in clean_name:
-                return GuardResult(
-                    safe=False,
-                    sanitized_sql="",
-                    reason=f"Schema-qualified or external table reference '{candidate}' is not allowed.",
+        for t in tree.find_all(exp.Table):
+            if not isinstance(t.this, exp.Identifier):
+                return self._reject("Table-valued functions are not permitted.")
+            if t.args.get("db") or t.args.get("catalog"):
+                return self._reject(
+                    f"Schema-qualified table '{t.sql(DIALECT)}' is not allowed."
                 )
-            if clean_name in cte_names:
+            name = t.name.lower()
+            if name in cte_names:
                 continue
-            if clean_name not in self.allowed_tables:
-                return GuardResult(
-                    safe=False,
-                    sanitized_sql="",
-                    reason=(
-                        f"Table '{candidate}' is not in the semantic layer allow-list "
-                        f"({sorted(self.allowed_tables)})."
-                    ),
+            if name not in self.allowed_tables:
+                return self._reject(
+                    f"Table '{t.name}' is not in the semantic layer allow-list "
+                    f"({sorted(self.allowed_tables)})."
                 )
-            if clean_name not in referenced:
-                referenced.append(clean_name)
+            if name not in referenced:
+                referenced.append(name)
 
         if not referenced:
-            return GuardResult(
-                safe=False,
-                sanitized_sql="",
-                reason="Query must reference at least one approved semantic layer table.",
-            )
+            return self._reject("Query must reference at least one approved semantic layer table.")
 
-        # 6. Enforce LIMIT clause
-        limit_match = re.search(r"\bLIMIT\s+(\d+)\b", masked, flags=re.IGNORECASE)
-        sanitized = raw
-        if limit_match:
-            limit_val = int(limit_match.group(1))
-            if limit_val > self.max_limit:
-                sanitized = re.sub(
-                    r"\bLIMIT\s+\d+\b",
-                    f"LIMIT {self.max_limit}",
-                    sanitized,
-                    flags=re.IGNORECASE,
-                )
+        # Only the outer LIMIT bounds the result set; nested LIMITs do not count.
+        limit = tree.args.get("limit")
+        if limit is None:
+            tree = tree.limit(self.default_limit)
         else:
-            sanitized = f"{sanitized} LIMIT {self.default_limit}"
+            bound = limit.expression
+            if not (isinstance(bound, exp.Literal) and bound.is_int):
+                return self._reject("LIMIT must be a non-negative integer literal.")
+            if int(bound.this) > self.max_limit:
+                tree = tree.limit(self.max_limit)
 
         return GuardResult(
             safe=True,
-            sanitized_sql=sanitized,
+            sanitized_sql=tree.sql(dialect=DIALECT),
             reason=None,
             referenced_tables=tuple(referenced),
         )

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
+import time
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -358,8 +360,18 @@ def seed_all(
 class RetailDatabase:
     """Read-only analytical query executor supporting DuckDB and SQLite seamlessly."""
 
-    def __init__(self, data_dir: Optional[Path] = None, prefer_duckdb: bool = True) -> None:
+    def __init__(
+        self,
+        data_dir: Optional[Path] = None,
+        prefer_duckdb: bool = True,
+        query_timeout_ms: Optional[int] = None,
+    ) -> None:
         self.data_dir = data_dir or DEFAULT_DATA_DIR
+        self.query_timeout_ms = (
+            int(query_timeout_ms)
+            if query_timeout_ms is not None
+            else int(os.getenv("BI_AGENT_QUERY_TIMEOUT_MS", "5000"))
+        )
         self.sqlite_path = self.data_dir / "retail_ops.db"
         self.duckdb_path = self.data_dir / "retail_ops.duckdb"
         self.prefer_duckdb = prefer_duckdb and HAS_DUCKDB
@@ -384,6 +396,9 @@ class RetailDatabase:
             # Open SQLite in read-only URI mode
             uri = f"file:{self.sqlite_path.as_posix()}?mode=ro"
             with sqlite3.connect(uri, uri=True, timeout=5.0) as conn:
+                # Wall-clock budget: aborts runaway queries (e.g. unbounded WITH RECURSIVE).
+                deadline = time.monotonic() + self.query_timeout_ms / 1000.0
+                conn.set_progress_handler(lambda: 1 if time.monotonic() > deadline else 0, 10_000)
                 cur = conn.cursor()
                 cur.execute(sql)
                 columns = [desc[0] for desc in cur.description] if cur.description else []
