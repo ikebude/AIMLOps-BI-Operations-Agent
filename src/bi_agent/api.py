@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from src.bi_agent.engine import BIOperationsEngine
 from src.bi_agent.monitor import KPIAnomalyMonitor
 from src.bi_agent.seed import RetailDatabase, seed_all
+from src.bi_agent.sql_guard import MAX_SQL_CHARS
 
 app = FastAPI(
     title="BI Operations Agent API",
@@ -48,7 +49,9 @@ def _get_components() -> tuple[RetailDatabase, BIOperationsEngine, KPIAnomalyMon
 
 
 class AskRequest(BaseModel):
-    question: str = Field(..., min_length=2, description="Plain-English business question")
+    question: str = Field(
+        ..., min_length=2, max_length=MAX_SQL_CHARS, description="Plain-English business question"
+    )
 
 
 class AskResponse(BaseModel):

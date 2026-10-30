@@ -43,3 +43,17 @@ def test_health_is_public(monkeypatch) -> None:
     r = TestClient(app).get("/health")
     assert r.status_code == 200
     assert set(r.json()) == {"status", "service", "backend", "daily_sales_rows"}
+
+
+def test_oversized_question_is_rejected_before_work(monkeypatch) -> None:
+    # Tester finding: a 5 MB question took ~6.5 s and was echoed back in full.
+    monkeypatch.setenv("BI_AGENT_API_KEY", "s3cret")
+    r = TestClient(app).post(
+        "/v1/ask", headers={"X-API-Key": "s3cret"}, json={"question": "revenue " * 5000}
+    )
+    assert r.status_code == 422
+
+
+def test_query_param_key_is_not_accepted(monkeypatch) -> None:
+    monkeypatch.setenv("BI_AGENT_API_KEY", "s3cret")
+    assert TestClient(app).get("/v1/digest/weekly?api_key=s3cret").status_code == 401
