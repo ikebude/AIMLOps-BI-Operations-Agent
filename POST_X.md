@@ -34,5 +34,5 @@ When $|z| \ge 2.5$, it flags operational anomalies and compiles a weekly executi
 
 **6/6**
 Runs offline with the local deterministic compiler or connected to Claude/OpenAI/Ollama.
-FastAPI + Streamlit + 63 passing tests.
+FastAPI + Streamlit + 70 passing tests.
 Check it out: https://github.com/ikebude/AIMLOps-BI-Operations-Agent

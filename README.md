@@ -119,7 +119,7 @@ pip install -r requirements.txt
 # 2. Run the 50-question benchmark and safety evaluation
 python -m src.bi_agent.evaluate
 
-# 3. Run automated unit & integration test suite (63 tests)
+# 3. Run automated unit & integration test suite (70 tests)
 pytest -v
 
 # 4. Launch the FastAPI service (the API fails closed without a key)
@@ -137,7 +137,7 @@ streamlit run app.py --server.address 127.0.0.1
 
 ## Security Model
 
-- **AST SQL guard (sqlglot, SQLite dialect):** every query is parsed; exactly one `SELECT`/`WITH` statement is allowed. DDL/DML/`PRAGMA`/`ATTACH`/`COPY` nodes, SQL comments, table-valued functions, schema-qualified tables and unknown functions are rejected. Every table reference in the whole tree (comma joins, subqueries, CTE bodies, `UNION` arms) must be in the semantic-layer allow-list. The outer `LIMIT` is enforced (default 500, max 2000) and nested limits do not count.
+- **AST SQL guard (sqlglot, SQLite dialect):** every query is parsed; exactly one `SELECT`/`WITH` statement is allowed. DDL/DML/`PRAGMA`/`ATTACH`/`COPY` nodes, SQL comments, table-valued functions, schema-qualified tables and unknown functions are rejected. Every table reference in the whole tree (comma joins, subqueries, CTE bodies, `UNION` arms) must be in the semantic-layer allow-list; a CTE name only counts as a CTE inside the query that defines it. SQL over 20,000 characters, or nested too deeply to parse, is rejected. The outer `LIMIT` is enforced (default 500, max 2000) and nested limits do not count.
 - **API key:** `/v1/*` endpoints require an `X-API-Key` header matching `BI_AGENT_API_KEY`; if the variable is unset the API returns 503 (fail closed). `/health` is public.
 - **Localhost bind:** the documented run commands and `Makefile` bind `127.0.0.1` (override with `HOST=...` only behind your own network controls).
 - **Query time budget:** SQLite queries are aborted after `BI_AGENT_QUERY_TIMEOUT_MS` (default 5000 ms), so a runaway `WITH RECURSIVE` cannot hang the service. The database is also opened read-only.

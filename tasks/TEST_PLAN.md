@@ -77,19 +77,34 @@ Start `$V/streamlit run app.py --server.headless true --server.address 127.0.0.1
 ## G. README claim → evidence table (tester fills the "Verified" column)
 | Claim (README/POST_*) | Evidence (file → field) | Verified |
 |---|---|---|
-| Execution accuracy X/50 (Y%) | `reports/eval_summary.json` → `questions_correct`, `execution_accuracy_pct` | |
-| Per-domain accuracies (5 rows) | → `domain_breakdown[]` | |
-| Held-out X/25 | → `heldout.questions_correct`, `heldout.execution_accuracy_pct` | |
-| 12/12 adversarial blocked, 0 unsafe executed | → `adversarial_prompts_blocked`, `unsafe_sql_executed` | |
-| Median / p95 latency ms (with a machine-dependent note) | → `median_latency_ms`, `p95_latency_ms` | |
-| ₦ GMV, gross margin, margin %, orders, 36,550 rows | → `dataset_summary.*` | |
-| 10 stores / 6 cities / 80 staff / 25 SKUs / 731 days | `dataset_summary` + `tests/test_bi_agent.py::test_seed_data_integrity` | |
-| Anomalies flagged N (if quoted) | → `kpi_monitor_summary.anomalies_flagged` | |
-| "N tests" | `pytest -q` output | |
-| "AST guard" (SELECT/WITH only, allow-list incl. comma joins/subqueries/CTEs, LIMIT enforced) | `src/bi_agent/sql_guard.py` (sqlglot) + `tests/test_sql_guard.py` | |
-| Q41/Q50 are the misses | → `error_analysis[].id` | |
-| API requires X-API-Key; binds 127.0.0.1 by default | `src/bi_agent/api.py`, `Makefile`, section C results | |
-| Backend = SQLite | → `backend_engine` | |
+| Execution accuracy X/50 (Y%) | `reports/eval_summary.json` → `questions_correct`, `execution_accuracy_pct` || ✅ 48/50, 96.0 (fresh run = committed JSON, latency fields aside) |
+| Per-domain accuracies (5 rows) | → `domain_breakdown[]` || ✅ 12/12, 10/10, 10/10, 8/9, 8/9 |
+| Held-out X/25 | → `heldout.questions_correct`, `heldout.execution_accuracy_pct` || ✅ 14/25, 56.0. Spec table = code (25/25 verbatim). Own scorer: 14/25 strict, 17/25 if extra columns allowed (H11, H13, H22) |
+| 12/12 adversarial blocked, 0 unsafe executed | → `adversarial_prompts_blocked`, `unsafe_sql_executed` || ✅ 12 / 0 |
+| Median / p95 latency ms (with a machine-dependent note) | → `median_latency_ms`, `p95_latency_ms` || ✅ 17.803 / 36.647 → 17.8 / 36.6 (tester re-run: 16.4 / 34.4) |
+| ₦ GMV, gross margin, margin %, orders, 36,550 rows | → `dataset_summary.*` || ✅ 10,149,566,063.03 / 2.90B / 28.61 / 2,145,814 / 36,550 |
+| 10 stores / 6 cities / 80 staff / 25 SKUs / 731 days | `dataset_summary` + `tests/test_bi_agent.py::test_seed_data_integrity` || ✅ dataset_summary + test passes |
+| Anomalies flagged N (if quoted) | → `kpi_monitor_summary.anomalies_flagged` || n/a (not quoted; JSON says 7) |
+| "N tests" | `pytest -q` output || ✅ after tester fixes: 70 passed (README/POST_X updated from 63) |
+| "AST guard" (SELECT/WITH only, allow-list incl. comma joins/subqueries/CTEs, LIMIT enforced) | `src/bi_agent/sql_guard.py` (sqlglot) + `tests/test_sql_guard.py` || ✅ after fix c3c2280 (CTE-scope bypass, see findings) |
+| Q41/Q50 are the misses | → `error_analysis[].id` || ✅ |
+| API requires X-API-Key; binds 127.0.0.1 by default | `src/bi_agent/api.py`, `Makefile`, section C results || ✅ section C all as expected |
+| Backend = SQLite | → `backend_engine` || ✅ |
 
 ## Tester findings
-(Tester: record defects here with file:line and severity.)
+Tester run 2026-10-30, fresh clone + working tree. 114 own guard attacks + the plan's list, via `SQLGuard.validate` and `engine.ask`.
+
+**Fixed by tester (commits on this branch):**
+1. **HIGH, allow-list bypass via CTE scope** (`src/bi_agent/sql_guard.py`, the old `cte_names` skip in the table loop). Any CTE name, wherever defined, was exempt everywhere in the statement. `SELECT staff.* FROM stores, (WITH staff AS (SELECT 1) SELECT * FROM staff), staff` with allow-list `[stores]` returned real `staff` rows (names, salaries). Against the shipped allow-list, `sqlite_temp_schema` / `sqlite_sequence` / `sqlite_dbpage` passed the guard the same way (empty or absent here, so no data leaked). Fix: CTE names resolve only inside the query that owns the `WITH` (`_visible_cte_names`). Regression test added. → c3c2280
+2. **MEDIUM, parser DoS / 500.** A 400 KB `1+1+…` took 9 s to validate, and 5,000 nested parentheses raised an uncaught `RecursionError` (500 from `/v1/ask`). Fix: 20,000-char cap, plus `RecursionError` → reject. → c3c2280
+3. **LOW, `SELECT 1 FROM stores;;` accepted** (sqlglot drops empty statements). Now only one trailing `;` is allowed. → c3c2280
+4. **LOW, `/v1/ask` had no question length cap.** A 5 MB question took 6.5 s and was echoed back in full. `max_length=20,000` → 422. → 9b93c73
+5. **UI**: the "2025 Completed Orders" card showed `1,164,…` at 1280. It now shows `1.16M`, and `img/ui_streamlit.png` was re-captured. → 68b0ca1
+
+**Open (not fixed, low):**
+- `sql_guard.py` lets `sqlite_version()` through (sqlglot models it, so it isn't `Anonymous`). It only discloses the SQLite version. Consider a function allow-list instead of the Anonymous-only deny.
+- Harmless accepted forms: `LIMIT 1 OFFSET -1` (SQLite treats it as 0), `LIMIT 0x7fffffff` (clamped to 2000), `NOT INDEXED`, `stores AS sqlite_master`.
+- `engine.py` compiler: unrecognised input (`VACUUM`, `garbage`, `''`, full-width `ＳＥＬＥＣＴ`) silently runs the default "total revenue" query and reports `safe=True`. Nothing unsafe runs, but a user may misread the answer. Consider an "I don't understand" response.
+- `seed.py:398`: `with sqlite3.connect(...)` commits but does not close the connection. Small fd churn per query.
+- `README.md:17` mentions PostgreSQL in the problem statement (it's about users' data, not a capability claim). Left as is.
+- Test plan wording: the UI error says "Blocked by Read-Only SQL Guard", not "Blocked by SQLGuard". Verified with that text.

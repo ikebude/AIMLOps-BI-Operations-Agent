@@ -26,3 +26,9 @@ README.md:70:Storage backend: SQLite (read-only URI mode). An optional DuckDB co
 ```
 
 Baseline 20 tests -> 63 tests (51 after Item 1, 61 after Item 2, 63 after Item 4). In-sample 48/50 unchanged; held-out 14/25 (H09,H11,H12,H13,H15,H18,H19,H21,H22,H23,H25 missed, identical to planner). Builder notes in tasks/BUILD_SPEC.md.
+
+## Tester review (2026-10-30)
+- [x] TEST_PLAN A–G executed from a fresh clone; results in `tasks/TEST_PLAN.md` (G table + Tester findings)
+- [x] Fixed: CTE-scope allow-list bypass (HIGH), parser DoS/RecursionError, `;;`, `/v1/ask` length cap, orders card truncation
+- [x] pytest 63 → 70 passed, 0 skipped; evaluate 48/50, 12/12, unsafe 0, held-out 14/25 (unchanged, deterministic)
+- Verdict: PASS-WITH-NOTES
