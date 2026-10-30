@@ -118,3 +118,32 @@ def test_runaway_recursive_query_times_out() -> None:
     assert time.monotonic() - t0 < 3
     assert out["safe"] is False
     assert "interrupted" in out["guard_reason"]
+
+
+def test_cte_name_does_not_shadow_tables_outside_its_scope() -> None:
+    # Tester finding: a CTE defined inside a subquery used to whitelist the same name everywhere,
+    # letting the outer query read a real table that is not in the allow-list.
+    guard = SQLGuard(allowed_tables=["stores"])
+    res = guard.validate(
+        "SELECT staff.* FROM stores, (WITH staff AS (SELECT 1) SELECT * FROM staff), staff"
+    )
+    assert not res.safe and "staff" in (res.reason or "")
+    # In-scope CTE references (incl. forward and UNION-wide) are still fine.
+    assert guard.validate("WITH s AS (SELECT * FROM stores) SELECT * FROM s UNION SELECT * FROM s").safe
+    assert guard.validate("WITH a AS (SELECT * FROM b), b AS (SELECT * FROM stores) SELECT * FROM a").safe
+
+
+@pytest.mark.parametrize("sql", ["SELECT 1 FROM stores;;", "SELECT 1 FROM stores; ;"])
+def test_extra_semicolons_rejected(guard: SQLGuard, sql: str) -> None:
+    assert not guard.validate(sql).safe
+
+
+def test_single_trailing_semicolon_allowed(guard: SQLGuard) -> None:
+    assert guard.validate("SELECT * FROM stores;").safe
+
+
+def test_huge_or_deeply_nested_sql_rejected_fast(guard: SQLGuard) -> None:
+    t0 = time.monotonic()
+    assert not guard.validate("SELECT " + "1+" * 200_000 + "1 FROM stores").safe
+    assert not guard.validate("SELECT " + "(" * 5000 + "1" + ")" * 5000 + " FROM stores").safe
+    assert time.monotonic() - t0 < 2
