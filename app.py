@@ -69,7 +69,8 @@ c1, c2, c3, c4, c5, c6 = st.columns(6)
 c1.metric("2025 Revenue (NGN)", f"₦{k['rev']/1e9:.2f}B")
 c2.metric("2025 Gross Margin", f"₦{k['gm']/1e9:.2f}B")
 c3.metric("Gross Margin (%)", f"{k['gm_pct']:.2f}%")
-c4.metric("2025 Completed Orders", f"{k['orders']:,}")
+# Compact like the ₦ cards: "1,164,814" truncated in a 1/6-width column at 1280 px.
+c4.metric("2025 Completed Orders", f"{k['orders'] / 1e6:.2f}M")
 c5.metric("Avg Basket Size", f"₦{k['basket']:,.0f}")
 c6.metric("Return Rate (%)", f"{k['ret_rate']:.2f}%")
 
