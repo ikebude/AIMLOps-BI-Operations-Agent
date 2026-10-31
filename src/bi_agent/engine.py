@@ -64,6 +64,24 @@ MONTH_MAP = {
 }
 
 
+# Returned by the compiler when a question names no metric it knows. The agent then says it does not
+# understand instead of silently answering a different question (it used to default to total revenue).
+NOT_UNDERSTOOD = "-- NOT_UNDERSTOOD"
+
+# Plain-English ways people ask about revenue without saying "revenue" or "sales".
+REVENUE_PHRASES = (
+    "revenue", "sales", "sell", "sold", "takings", "bring in", "brought in", "earn", "made",
+    "turnover", "income", "gmv", "naira", "perform", "how much",
+)
+
+NOT_UNDERSTOOD_MESSAGE = (
+    "I don't understand that question yet, so I haven't guessed. I can answer questions about revenue, "
+    "gross margin, orders, basket size, units sold, returns, COGS, staff and payroll, products and stores, "
+    "by store, city, region, channel, category or period. For example: "
+    "\"What was the total revenue in Lagos in 2025?\" or \"Orders by channel in Q4 2025\"."
+)
+
+
 class SemanticPatternCompiler:
     """Deterministic NL-to-SQL compiler mapping business questions onto governed semantic views."""
 
@@ -651,7 +669,7 @@ class SemanticPatternCompiler:
         wants_units = "units sold" in q_lower or "total units" in q_lower or "unit volume" in q_lower
         wants_cogs = "cogs" in q_lower or "cost of goods sold" in q_lower
         wants_avg_daily_rev = "average daily revenue" in q_lower or "avg daily revenue" in q_lower or "daily average revenue" in q_lower
-        wants_revenue = "revenue" in q_lower or "sales" in q_lower or not any(
+        other_metric = any(
             [
                 wants_return_rate,
                 wants_returns_ngn,
@@ -665,6 +683,10 @@ class SemanticPatternCompiler:
                 wants_avg_daily_rev,
             ]
         )
+        asks_revenue = any(p in q_lower for p in REVENUE_PHRASES)
+        if not other_metric and not asks_revenue:
+            return NOT_UNDERSTOOD
+        wants_revenue = "revenue" in q_lower or "sales" in q_lower or not other_metric
 
         if wants_avg_daily_rev:
             metric_exprs.append(
@@ -929,6 +951,22 @@ class BIOperationsEngine:
         if not candidate_sql:
             candidate_sql = self.compiler.compile(question)
 
+        if candidate_sql.strip() == NOT_UNDERSTOOD:
+            return {
+                "question": question,
+                "sql": None,
+                "rows": [],
+                "columns": [],
+                "summary_text": NOT_UNDERSTOOD_MESSAGE,
+                "chart_spec": {"type": "none", "x": None, "y": None},
+                "latency_ms": round((time.perf_counter() - t0) * 1000.0, 3),
+                "safe": True,
+                "understood": False,
+                "guard_reason": None,
+                "provider": used_provider,
+                "cost_usd": 0.0,
+            }
+
         guard_res = self.guard.validate(candidate_sql)
         reject_reason = guard_res.reason if not guard_res.safe else None
         columns: List[str] = []
@@ -970,6 +1008,7 @@ class BIOperationsEngine:
             "chart_spec": self._build_chart_spec(columns, rows),
             "latency_ms": latency_ms,
             "safe": True,
+            "understood": True,
             "guard_reason": None,
             "provider": used_provider,
             "cost_usd": 0.0 if used_provider == "semantic_compiler" else 0.0004,

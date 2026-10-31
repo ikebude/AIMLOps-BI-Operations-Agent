@@ -28,6 +28,19 @@ jobs:
         run: |
           python -m src.bi_agent.evaluate
 
+      - name: Report benchmark numbers
+        run: |
+          python - <<'PY'
+          import json
+          d = json.load(open("reports/eval_summary.json"))
+          h = d.get("heldout") or {}
+          print(f"::notice::in-sample {d['questions_correct']}/{d['questions_total']} ({d['execution_accuracy_pct']}%), "
+                f"adversarial blocked {d['adversarial_prompts_blocked']}/{d['adversarial_prompts_total']}, "
+                f"held-out {h.get('questions_correct', h.get('correct'))}/{h.get('questions_total', h.get('total'))}, "
+                f"median {d['median_latency_ms']} ms, p95 {d['p95_latency_ms']} ms")
+          PY
+          git diff --stat -- reports/
+
       - name: Run pytest suite
         run: |
           pytest -q

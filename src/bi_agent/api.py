@@ -56,13 +56,14 @@ class AskRequest(BaseModel):
 
 class AskResponse(BaseModel):
     question: str
-    sql: str
+    sql: Optional[str] = None  # None when the question was not understood
     rows: List[Dict[str, Any]]
     columns: List[str]
     summary_text: str
     chart_spec: Dict[str, Any]
     latency_ms: float
     safe: bool
+    understood: bool = True
     guard_reason: Optional[str] = None
     provider: str
     cost_usd: float

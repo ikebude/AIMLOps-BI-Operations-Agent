@@ -65,12 +65,12 @@ _, kpi_rows = db.execute_query(
     "FROM daily_sales WHERE STRFTIME('%Y', sale_date) = '2025'"
 )
 k = kpi_rows[0]
-c1, c2, c3, c4, c5, c6 = st.columns(6)
+c1, c2, c3, c4, c5, c6 = st.columns([1, 1, 1, 1.35, 1, 1])
 c1.metric("2025 Revenue (NGN)", f"₦{k['rev']/1e9:.2f}B")
 c2.metric("2025 Gross Margin", f"₦{k['gm']/1e9:.2f}B")
 c3.metric("Gross Margin (%)", f"{k['gm_pct']:.2f}%")
-# Compact like the ₦ cards: "1,164,814" truncated in a 1/6-width column at 1280 px.
-c4.metric("2025 Completed Orders", f"{k['orders'] / 1e6:.2f}M")
+# Exact count (owner decision 2026-10-30). The orders column is wider so all seven digits fit at 1280 px.
+c4.metric("2025 Completed Orders", f"{k['orders']:,}")
 c5.metric("Avg Basket Size", f"₦{k['basket']:,.0f}")
 c6.metric("Return Rate (%)", f"{k['ret_rate']:.2f}%")
 
@@ -101,7 +101,9 @@ with tab_chat:
 
     if st.button("Run Query", type="primary") or user_q:
         resp = engine.ask(user_q)
-        if not resp["safe"]:
+        if not resp.get("understood", True):
+            st.info(resp["summary_text"])
+        elif not resp["safe"]:
             st.error(f"🛡️ **Blocked by Read-Only SQL Guard:** {resp['guard_reason']}")
             if show_sql:
                 st.code(resp["sql"], language="sql")
