@@ -51,7 +51,7 @@ db, engine, monitor, semantic_cfg = init_resources()
 
 st.title("📊 BI Operations Agent")
 st.caption(
-    "Governed Plain-English NL-to-SQL · Read-Only SQL Guard · Rolling 28-Day MAD KPI Anomaly Detection · Weekly Executive Digest"
+    "Governed Plain-English NL-to-SQL · Read-Only SQL Guard · Rolling 28-Day MAD KPI Anomaly Detection · Weekly Executive Digest · Synthetic Nigerian retail data (not real transactions)"
 )
 
 # Top KPI Ribbon from real seeded dataset

@@ -1,6 +1,8 @@
 # BI Operations Agent — Plain-English Analytics, Governed SQL & KPI Monitoring
 
-> **One-line result:** Natural-language business intelligence agent backed by a governed YAML semantic layer, a sqlglot AST read-only SQL guard, and robust MAD z-score anomaly detection. On a **synthetic** 2-year Nigerian retail dataset (₦10.15B GMV) it scores **96.0% execution accuracy (48/50)** on its in-sample 50-question benchmark, **56.0% (14/25)** on 25 reworded held-out questions, and blocks **12/12** adversarial attacks (0 unsafe SQL executed) at **17.8 ms median latency** (p95 36.6 ms; machine-dependent).
+> **One-line result:** Natural-language business intelligence agent backed by a governed YAML semantic layer, a sqlglot AST read-only SQL guard, and robust MAD z-score anomaly detection. On a **synthetic** 2-year Nigerian retail dataset (₦10.15B GMV) it scores **96.0% execution accuracy (48/50)** on its in-sample 50-question benchmark, **56.0% (14/25)** on 25 reworded held-out questions, and blocks **12/12** adversarial attacks (0 unsafe SQL executed) at **18.8 ms median latency** (p95 39.1 ms; machine-dependent).
+
+**What it shows:** semantic-layer design, SQL safety engineering (AST validation, not regex), honest evaluation with a held-out set, robust anomaly detection, and a small FastAPI + Streamlit product around it. Python, sqlglot, SQLite, pandas, FastAPI, Streamlit, pytest, GitHub Actions.
 
 | Streamlit UI (`img/ui_streamlit.png`) | KPI anomalies (`img/kpi_anomalies.png`) |
 |---|---|
@@ -16,12 +18,12 @@ Benchmark summary chart (`img/hero.png`):
 
 Small and medium-sized enterprise (SME) leaders and operations managers have business data spread across SQLite, DuckDB, PostgreSQL, and spreadsheets, but lack a dedicated data engineering team to write ad-hoc SQL or maintain custom BI dashboards. 
 
-Standard generative text-to-SQL approaches fail in real-world business settings due to three critical flaws:
+Letting a language model write SQL straight against a business database has three common problems:
 1. **Semantic Drift & Inconsistent Metrics:** LLMs generate conflicting SQL expressions for basic business definitions (e.g. gross margin vs operating margin, or inconsistent tax/returns accounting).
 2. **Security Vulnerabilities:** Raw text-to-SQL models are vulnerable to prompt injection, schema leaks, table drops, and unbounded full-table scans.
 3. **Lack of Operational Proactivity:** Standard chatbots wait passively for questions instead of monitoring daily transactions and flagging operational outliers.
 
-**BI Operations Agent** solves this with a **governed YAML semantic layer**, an **AST read-only SQL guard**, and an **automated rolling MAD z-score KPI monitor**.
+This project addresses them with a **governed YAML semantic layer**, an **AST read-only SQL guard**, and a **rolling MAD z-score KPI monitor**.
 
 ---
 
@@ -31,7 +33,7 @@ Standard generative text-to-SQL approaches fail in real-world business settings 
   - **Period:** 2 full years (2024-01-01 to 2025-12-31, 731 calendar days).
   - **Stores:** 10 physical locations across 6 Nigerian cities (Lagos [Ikeja, Lekki, Surulere], Abuja [Wuse, Garki], Port Harcourt, Ibadan, Kano, Enugu).
   - **Volume:** 36,550 store-category daily sales records representing **2,145,814 orders** and **₦10,149,566,063.03 in gross revenue** (₦2.90B gross margin, 28.61% overall margin).
-  - **Authentic Dynamics:** Built-in holiday seasonality (December Q4 festive surge) and end-of-month salary-week spikes (25th–30th of every month) with injected realistic supply-chain and pricing anomalies.
+  - **Built-in patterns:** December festive surge, end-of-month salary-week spikes (25th–30th of every month), and a few injected supply-chain and pricing anomalies for the monitor to find.
 
 ---
 
@@ -42,9 +44,10 @@ User Query (Plain English)
           │
           ▼
 ┌──────────────────────────────────────────────┐
-│       Engine & Semantic Pattern Compiler      │
+│      Engine & Semantic Pattern Compiler      │
 │  - Maps intent to approved views & metrics   │
-│  - Multi-provider: Anthropic / OpenAI / Local│
+│  - Default: deterministic compiler (no LLM)  │
+│  - Optional LLM: Anthropic / OpenAI / Ollama │
 └──────────────────────────────────────────────┘
           │
           ▼ (Draft SQL)
@@ -69,6 +72,8 @@ Executive Response + Chart Spec + Anomaly Z-Score
 
 Storage backend: SQLite (read-only URI mode). An optional DuckDB code path exists in `seed.py` when `duckdb` is installed; it is not exercised by CI. Postgres is on the roadmap.
 
+**Optional LLM provider.** Setting `BI_AGENT_PROVIDER=anthropic|openai|ollama` (plus the key) makes `engine.py` ask that model for SQL first, with a 4 s timeout; on any error it falls back to the deterministic compiler and the response says `provider: semantic_compiler`. LLM output is validated by the same guard as everything else. Every number in this README comes from the deterministic compiler: the LLM path has unit tests with a mocked provider but has not been benchmarked, and its token cost is not metered (`cost_usd` is `null`).
+
 1. **Governed Semantic Layer (`config/semantic_layer.yaml`):**
    - Declares official metrics: `revenue_ngn`, `gross_margin_ngn`, `gross_margin_pct`, `orders_count`, `avg_basket_ngn`, `return_rate`.
    - Protects against conflicting joins and metric definitions.
@@ -86,7 +91,7 @@ Storage backend: SQLite (read-only URI mode). An optional DuckDB code path exist
 
 Evaluated on an automated 50-question business test suite covering revenue, margins, rankings, seasonality, payroll, and returns, plus 12 adversarial injection attacks:
 
-| Benchmark Dimension | Measured Result | Production Target | Status |
+| Benchmark Dimension | Measured Result | Self-set target | Status |
 |---|---:|---:|:---:|
 | **Overall Execution Accuracy (in-sample)** | **`96.0%` (48/50)** | `≥ 90.0%` | Passed |
 | - *Revenue & Growth Domain (12 Qs)* | **`100.0%` (12/12)** | `100.0%` | Passed |
@@ -97,14 +102,14 @@ Evaluated on an automated 50-question business test suite covering revenue, marg
 | **Held-out generalisation (25 reworded Qs)** | **`56.0%` (14/25)** | none set | Reported |
 | **Adversarial Injections Blocked** | **`100.0%` (12/12)** | `100.0%` | Passed |
 | **Unsafe SQL Executed** | **`0`** | `0` | Passed |
-| **Median Execution Latency** | **`17.8 ms`** | `< 2,000 ms` | Passed |
-| **95th Percentile Latency (p95)** | **`36.6 ms`** | `< 6,000 ms` | Passed |
+| **Median Execution Latency** | **`18.8 ms`** | `< 2,000 ms` | Passed |
+| **95th Percentile Latency (p95)** | **`39.1 ms`** | `< 6,000 ms` | Passed |
 
 Latency is machine-dependent; the figures above were measured on the run that produced `reports/eval_summary.json`.
 
 **Held-out generalisation.** The 50 benchmark questions are the phrasings the deterministic compiler's templates were written for (in-sample). On 25 reworded held-out questions it scores 14/25 (strict execution match; the column count must equal the ground truth, so an answer with an extra descriptive column counts as a miss). By domain: Revenue & Growth 6/6, Margins & Profitability 3/5, Store & Regional Rankings 2/5, Seasonality & Salary-Week 2/4, Returns, Staff & Catalog 1/5. The held-out set lives in `HELDOUT_QUESTIONS` in `src/bi_agent/evaluate.py` and was not used to tune the compiler.
 
-> **Error Analysis (Documented Honestly):** The two non-matching questions (`Q41` and `Q50`) involved composite nested ratios across conditional sub-aggregations (ratio of salary-week basket to off-week basket in a specific city) and multi-table covariance calculations, which fall outside standard single-layer SQL templates. These are documented in `reports/eval_summary.json` as future roadmap improvements for multi-step agent reasoning.
+> **Error Analysis (Documented Honestly):** The two non-matching questions (`Q41` and `Q50`) involved composite nested ratios across conditional sub-aggregations (ratio of salary-week basket to off-week basket in a specific city) and a correlation between store floor area and revenue, which fall outside standard single-layer SQL templates. These are documented in `reports/eval_summary.json` as future roadmap improvements for multi-step agent reasoning.
 
 ---
 
@@ -119,7 +124,7 @@ pip install -r requirements.txt
 # 2. Run the 50-question benchmark and safety evaluation
 python -m src.bi_agent.evaluate
 
-# 3. Run automated unit & integration test suite (70 tests)
+# 3. Run the unit & integration test suite (89 tests)
 pytest -v
 
 # 4. Launch the FastAPI service (the API fails closed without a key)
@@ -140,6 +145,8 @@ streamlit run app.py --server.address 127.0.0.1
 - **AST SQL guard (sqlglot, SQLite dialect):** every query is parsed; exactly one `SELECT`/`WITH` statement is allowed. DDL/DML/`PRAGMA`/`ATTACH`/`COPY` nodes, SQL comments, table-valued functions, schema-qualified tables and unknown functions are rejected. Every table reference in the whole tree (comma joins, subqueries, CTE bodies, `UNION` arms) must be in the semantic-layer allow-list; a CTE name only counts as a CTE inside the query that defines it. SQL over 20,000 characters, or nested too deeply to parse, is rejected. The outer `LIMIT` is enforced (default 500, max 2000) and nested limits do not count.
 - **API key:** `/v1/*` endpoints require an `X-API-Key` header matching `BI_AGENT_API_KEY`; if the variable is unset the API returns 503 (fail closed). `/health` is public.
 - **Localhost bind:** the documented run commands and `Makefile` bind `127.0.0.1` (override with `HOST=...` only behind your own network controls).
+- **Raw SQL is treated like any other candidate:** a question that is itself a `SELECT` is passed to the guard, not refused outright, so anyone with the API key can run guarded read-only queries over the four allow-listed tables (including the synthetic `staff` names and salaries). The same applies to SQL returned by the optional LLM provider; it gets no extra trust.
+- **Value size cap:** the SQLite connection limits any single string/blob to 1 MB, so functions such as `printf('%900000000d', 1)` cannot exhaust memory.
 - **Query time budget:** SQLite queries are aborted after `BI_AGENT_QUERY_TIMEOUT_MS` (default 5000 ms), so a runaway `WITH RECURSIVE` cannot hang the service. The database is also opened read-only.
 
 ---
