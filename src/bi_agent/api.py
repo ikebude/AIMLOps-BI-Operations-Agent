@@ -66,7 +66,7 @@ class AskResponse(BaseModel):
     understood: bool = True
     guard_reason: Optional[str] = None
     provider: str
-    cost_usd: float
+    cost_usd: Optional[float] = None  # None: LLM provider, cost not metered
 
 
 @app.get("/health")

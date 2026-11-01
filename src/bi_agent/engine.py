@@ -1011,5 +1011,6 @@ class BIOperationsEngine:
             "understood": True,
             "guard_reason": None,
             "provider": used_provider,
-            "cost_usd": 0.0 if used_provider == "semantic_compiler" else 0.0004,
+            # The deterministic compiler is free; LLM token cost is not metered, so report None.
+            "cost_usd": 0.0 if used_provider == "semantic_compiler" else None,
         }
