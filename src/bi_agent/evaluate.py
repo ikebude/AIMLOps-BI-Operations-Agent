@@ -731,10 +731,12 @@ def generate_charts(
     fig.text(
         0.04,
         0.905,
-        f"Execution Accuracy: {eval_summary['questions_correct']}/{eval_summary['questions_total']} "
+        f"In-sample: {eval_summary['questions_correct']}/{eval_summary['questions_total']} "
         f"({eval_summary['execution_accuracy']*100:.1f}%)  |  "
-        f"Adversarial SQL Blocked: {eval_summary['adversarial_prompts_blocked']}/{eval_summary['adversarial_prompts_total']} (100%)  |  "
-        f"Median Latency: {eval_summary['median_latency_ms']:.2f} ms  |  2-Year Volume: 36,550 Store-Category Days",
+        f"Held-out: {eval_summary['heldout']['questions_correct']}/{eval_summary['heldout']['questions_total']} "
+        f"({eval_summary['heldout']['execution_accuracy_pct']:.1f}%)  |  "
+        f"Adversarial SQL Blocked: {eval_summary['adversarial_prompts_blocked']}/{eval_summary['adversarial_prompts_total']}  |  "
+        f"Median Latency: {eval_summary['median_latency_ms']:.2f} ms  |  Synthetic data",
         color="#A1A1AA",
         fontsize=11,
     )
@@ -769,7 +771,7 @@ def generate_charts(
     ax2.set_xlim(0, 122)
     ax2.tick_params(axis="both", colors="#D4D4D8", labelsize=9.5)
     ax2.set_xlabel("Execution Accuracy (%)", color="#D4D4D8", fontsize=10)
-    ax2.set_title("50-Question Accuracy by Domain", color="#FAFAFA", fontsize=12, fontweight="bold", loc="left", pad=10)
+    ax2.set_title("In-sample 50-Question Accuracy by Domain", color="#FAFAFA", fontsize=12, fontweight="bold", loc="left", pad=10)
     ax2.grid(axis="x", color="#27272A", linestyle="--", alpha=0.6)
     for bar, lbl in zip(bars, dom_labels):
         ax2.text(bar.get_width() + 1.8, bar.get_y() + bar.get_height() / 2, lbl, va="center", color="#FAFAFA", fontsize=9.5, fontweight="bold")
