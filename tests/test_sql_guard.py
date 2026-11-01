@@ -147,3 +147,17 @@ def test_huge_or_deeply_nested_sql_rejected_fast(guard: SQLGuard) -> None:
     assert not guard.validate("SELECT " + "1+" * 200_000 + "1 FROM stores").safe
     assert not guard.validate("SELECT " + "(" * 5000 + "1" + ")" * 5000 + " FROM stores").safe
     assert time.monotonic() - t0 < 2
+
+
+def test_huge_string_values_are_capped_at_execution(db: RetailDatabase) -> None:
+    # Audit 2026-11-01: printf() is an allowed function, and a huge width made SQLite build a
+    # 100 MB string per row; the progress-handler timeout never fires inside one call, so ten
+    # rows took ~10 s and ~1.3 GB of memory. The connection now caps string/blob length.
+    engine = BIOperationsEngine(db=db)
+    t0 = time.monotonic()
+    out = engine.ask("SELECT printf('%100000000d', 1) AS p FROM stores")
+    assert time.monotonic() - t0 < 3
+    # SQLite either returns NULL for the oversized value or aborts with "string or blob too big".
+    assert all(r["p"] is None for r in out["rows"])
+    out = engine.ask("SELECT replace(printf('%500000d', 1), ' ', 'xxxx') AS p FROM stores")
+    assert out["safe"] is False and "too big" in out["guard_reason"]

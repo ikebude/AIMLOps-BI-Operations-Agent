@@ -21,6 +21,8 @@ except ImportError:
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_DATA_DIR = ROOT_DIR / "data"
+# Largest single string/blob a query may build (1 MB); far above any real result value.
+MAX_VALUE_BYTES = 1_000_000
 DEFAULT_SQLITE_PATH = DEFAULT_DATA_DIR / "retail_ops.db"
 DEFAULT_DUCKDB_PATH = DEFAULT_DATA_DIR / "retail_ops.duckdb"
 
@@ -399,6 +401,9 @@ class RetailDatabase:
                 # Wall-clock budget: aborts runaway queries (e.g. unbounded WITH RECURSIVE).
                 deadline = time.monotonic() + self.query_timeout_ms / 1000.0
                 conn.set_progress_handler(lambda: 1 if time.monotonic() > deadline else 0, 10_000)
+                # The progress handler cannot interrupt a single huge printf()/replace() call,
+                # so also cap any one string/blob value (SQLite's default is 1 GB).
+                conn.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, MAX_VALUE_BYTES)
                 cur = conn.cursor()
                 cur.execute(sql)
                 columns = [desc[0] for desc in cur.description] if cur.description else []
